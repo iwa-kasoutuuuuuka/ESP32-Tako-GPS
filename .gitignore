@@ -1,0 +1,25 @@
+# Android build outputs and caches
+.gradle/
+build/
+app/build/
+local.properties
+.navigation/
+captures/
+.externalNativeBuild/
+.cxx/
+cmake/
+
+# Kotlin / IntelliJ / Android Studio settings
+.idea/
+*.iml
+.DS_Store
+
+# ESP32 / Arduino build caches
+arduino15/
+bin/
+sketchbook/
+build_output.log
+*.log
+
+# Exclude large zip files (such as gradle distribution zip)
+*.zip

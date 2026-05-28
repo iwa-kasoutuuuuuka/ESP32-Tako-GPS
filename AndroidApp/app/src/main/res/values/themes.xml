@@ -1,0 +1,3 @@
+<resources>
+    <style name="Theme.ESP32Logger" parent="android:Theme.Material.NoActionBar" />
+</resources>
