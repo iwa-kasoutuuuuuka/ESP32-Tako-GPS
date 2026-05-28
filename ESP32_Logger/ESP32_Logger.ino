@@ -115,6 +115,11 @@ void core0Task(void* parameter) {
     static String sdBuffer = "";
     static int sdBufferCount = 0;
     
+    // ヒープメモリの動的再アロケーションによる断片化（メモリ不足クラッシュ）を完全に防止
+    if (sdBuffer.capacity() < 1000) {
+      sdBuffer.reserve(1024);
+    }
+    
     sdBuffer += finalCsv;
     sdBufferCount++;
     
