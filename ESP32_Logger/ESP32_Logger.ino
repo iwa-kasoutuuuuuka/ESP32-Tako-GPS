@@ -26,6 +26,9 @@ BluetoothSerial SerialBT;
 TinyGPSPlus gps;
 HardwareSerial gpsSerial(2); // HardwareSerial2を使用
 
+// SDカードが正常に初期化されたかどうかの管理フラグ
+bool sdInitialized = false;
+
 // コア間で安全にデータを共有するための構造体
 struct SensorData {
   volatile unsigned long pulse_us; // パルス周期（マイクロ秒）
@@ -33,6 +36,7 @@ struct SensorData {
   volatile double latitude;        // GPS緯度
   volatile double longitude;       // GPS経度
   char utc_time[12];               // UTC時刻 (HH:MM:SS)
+  volatile int satellites;         // 捕捉している衛星数
 };
 
 SensorData sharedData;
@@ -58,7 +62,7 @@ void IRAM_ATTR handleTachoInterrupt() {
 }
 
 // ==========================================
-// 4. チェックサム計算関数 (NMEA-0183に準拠したXOR)
+// 4. ヘルパー関数定義 (NMEAチェックサムおよびA-GPS処理)
 // ==========================================
 byte calculateChecksum(String str) {
   byte checksum = 0;
@@ -66,6 +70,100 @@ byte calculateChecksum(String str) {
     checksum ^= str.charAt(i);
   }
   return checksum;
+}
+
+// 10進数座標（DD.dddddd）からNMEA度分形式（DDMM.mmmmm）へ変換する
+String convertToNmeaAngle(double decimalDegree, bool isLongitude) {
+  double absVal = fabs(decimalDegree);
+  int degrees = (int)absVal;
+  double minutes = (absVal - degrees) * 60.0;
+  
+  char buffer[32];
+  if (isLongitude) {
+    snprintf(buffer, sizeof(buffer), "%03d%02.5f", degrees, minutes);
+  } else {
+    snprintf(buffer, sizeof(buffer), "%02d%02.5f", degrees, minutes);
+  }
+  return String(buffer);
+}
+
+// アシストパケットの解析およびGPSモジュールへの注入
+void processAgpsPacket(String packet) {
+  // パケット例: $AGPS,35.681234,139.767123,50.4,290526,235130.00*4A
+  int asteriskIdx = packet.indexOf('*');
+  if (asteriskIdx < 0) return;
+  
+  String payload = packet.substring(1, asteriskIdx); // $を除いた部分
+  String receivedChecksumStr = packet.substring(asteriskIdx + 1);
+  receivedChecksumStr.trim();
+  
+  byte calculated = 0;
+  for (int i = 0; i < payload.length(); i++) {
+    calculated ^= payload.charAt(i);
+  }
+  
+  byte received = strtol(receivedChecksumStr.c_str(), NULL, 16);
+  if (calculated != received) {
+    Serial.println("[AGPS] チェックサムエラー。パケットを破棄します。");
+    return;
+  }
+  
+  String values[6];
+  int valCount = 0;
+  int currentIdx = 0;
+  
+  int nextComma = payload.indexOf(',');
+  if (nextComma < 0) return;
+  currentIdx = nextComma + 1;
+  
+  while (currentIdx < payload.length() && valCount < 6) {
+    nextComma = payload.indexOf(',', currentIdx);
+    if (nextComma < 0) {
+      values[valCount++] = payload.substring(currentIdx);
+      break;
+    }
+    values[valCount++] = payload.substring(currentIdx, nextComma);
+    currentIdx = nextComma + 1;
+  }
+  
+  if (valCount < 5) {
+    Serial.println("[AGPS] パケットのデータ数が不足しています。");
+    return;
+  }
+  
+  double lat = values[0].toDouble();
+  double lon = values[1].toDouble();
+  float alt = values[2].toFloat();
+  String dateStr = values[3];
+  String timeStr = values[4];
+  
+  String latDir = (lat >= 0) ? "N" : "S";
+  String lonDir = (lon >= 0) ? "E" : "W";
+  
+  String nmeaLat = convertToNmeaAngle(lat, false);
+  String nmeaLon = convertToNmeaAngle(lon, true);
+  
+  // ① u-blox 時刻初期化 ($PUBX,40)
+  String pubx40_payload = "PUBX,40," + timeStr + "," + dateStr + ",0,0,0,0,0,10";
+  byte cs40 = calculateChecksum(pubx40_payload);
+  char cs40Str[8];
+  sprintf(cs40Str, "*%02X", cs40);
+  String pubx40 = "$" + pubx40_payload + String(cs40Str);
+  
+  // ② u-blox 位置初期化 ($PUBX,41)
+  String pubx41_payload = "PUBX,41,0," + nmeaLat + "," + latDir + "," + nmeaLon + "," + lonDir + "," + String(alt, 1) + ",100,100";
+  byte cs41 = calculateChecksum(pubx41_payload);
+  char cs41Str[8];
+  sprintf(cs41Str, "*%02X", cs41);
+  String pubx41 = "$" + pubx41_payload + String(cs41Str);
+  
+  // GPSモジュールへ書き込み
+  gpsSerial.println(pubx40);
+  gpsSerial.println(pubx41);
+  
+  Serial.println("[AGPS] スマホからアシストデータを受信し、GPSモジュールへ注入しました！");
+  Serial.print("  -> 時刻同期: "); Serial.println(pubx40);
+  Serial.print("  -> 位置同期: "); Serial.println(pubx41);
 }
 
 // ==========================================
@@ -111,25 +209,50 @@ void core0Task(void* parameter) {
       SerialBT.print(finalCsv);
     }
 
+    // スマホからのA-GPSアシストデータの受信処理
+    static String btBuffer = "";
+    while (SerialBT.available() > 0) {
+      char c = SerialBT.read();
+      if (c == '\n') {
+        if (btBuffer.startsWith("$AGPS")) {
+          processAgpsPacket(btBuffer);
+        }
+        btBuffer = "";
+      } else if (c != '\r') {
+        btBuffer += c;
+      }
+    }
+
     // MicroSDカードへの追記保存 (10Hzでの頻繁な開閉を防ぐため、10回(1秒)分バッファリングして一気に書き込み)
     static String sdBuffer = "";
     static int sdBufferCount = 0;
+    static bool isReserved = false;
     
     // ヒープメモリの動的再アロケーションによる断片化（メモリ不足クラッシュ）を完全に防止
-    if (sdBuffer.capacity() < 1000) {
+    if (!isReserved) {
       sdBuffer.reserve(1024);
+      isReserved = true;
     }
     
     sdBuffer += finalCsv;
     sdBufferCount++;
     
     if (sdBufferCount >= 10) {
-      File logFile = SD.open("/log.txt", FILE_WRITE);
-      if (logFile) {
-        logFile.print(sdBuffer);
-        logFile.close();
+      if (sdInitialized) {
+        File logFile = SD.open("/log.txt", FILE_WRITE);
+        if (logFile) {
+          logFile.print(sdBuffer);
+          logFile.close();
+        } else {
+          Serial.println("[Core0] SDカードへの書き込みに失敗しました。");
+        }
       } else {
-        Serial.println("[Core0] SDカードへの書き込みに失敗しました。");
+        // SDカードが利用できない場合はログを破棄し、シリアル警告（デバグ用）
+        static unsigned long lastSdWarning = 0;
+        if (millis() - lastSdWarning > 10000) { // 10秒に1回だけ警告出力
+          Serial.println("[Core0] 警告: SDカードが初期化されていないため、ローカル保存をスキップします。");
+          lastSdWarning = millis();
+        }
       }
       sdBuffer = "";
       sdBufferCount = 0;
@@ -137,6 +260,23 @@ void core0Task(void* parameter) {
 
     // 1秒間の高精度スリープ (Core 0を解放)
     vTaskDelayUntil(&lastWakeTime, frequency);
+
+    // 5秒に1回 (50ループに1回) GPS診断情報を出力
+    static int debugCounter = 0;
+    if (++debugCounter >= 50) {
+      debugCounter = 0;
+      Serial.println("\n--- [GPS 診断デバッグ情報] ---");
+      Serial.print("  処理した文字数 (charsProcessed): "); Serial.println(gps.charsProcessed());
+      Serial.println("    ※この値が0のままで増えない場合、ESP32とGPSモジュール間の配線(TX/RXクロス接続)や電源に問題があります。");
+      Serial.print("  チェックサムエラー数 (failedChecksum): "); Serial.println(gps.failedChecksum());
+      Serial.println("    ※この値が処理文字数に対して非常に多い場合、通信速度(ボーレート)が一致していません。");
+      Serial.print("  現在捕捉中の衛星数: "); Serial.println(localCopy.satellites);
+      Serial.print("  緯度/経度有効判定: "); Serial.println(gps.location.isValid() ? "有効 (OK)" : "無効 (未測位)");
+      if (gps.charsProcessed() > 0 && !gps.location.isValid()) {
+        Serial.println("    💡 アドバイス: GPSからの電波信号は受信していますが、まだ衛星を捕捉（測位）できていません。屋内の場合は屋外に出て数分お待ちください。");
+      }
+      Serial.println("--------------------------------\n");
+    }
   }
 }
 
@@ -162,6 +302,7 @@ void setup() {
   sharedData.latitude = 0.0;
   sharedData.longitude = 0.0;
   strcpy(sharedData.utc_time, "00:00:00");
+  sharedData.satellites = 0;
 
   // GPSモジュールの通信開始 (HardwareSerial2)
   gpsSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
@@ -178,8 +319,10 @@ void setup() {
   SPI.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, SD_CS_PIN);
   if (!SD.begin(SD_CS_PIN)) {
     Serial.println("SDカードの初期化に失敗しました。配線またはカードを確認してください。");
+    sdInitialized = false;
   } else {
     Serial.println("SDカードの初期化に成功しました。(log.txt を使用)");
+    sdInitialized = true;
   }
 
   // タコメーター入力ピンの設定および外部割り込み登録
@@ -274,6 +417,13 @@ void loop() {
       snprintf(sharedData.utc_time, sizeof(sharedData.utc_time), 
                "%02d:%02d:%02d", 
                gps.time.hour(), gps.time.minute(), gps.time.second());
+    }
+
+    // 捕捉している衛星数を取得
+    if (gps.satellites.isValid()) {
+      sharedData.satellites = gps.satellites.value();
+    } else {
+      sharedData.satellites = 0;
     }
 
     xSemaphoreGive(dataMutex);

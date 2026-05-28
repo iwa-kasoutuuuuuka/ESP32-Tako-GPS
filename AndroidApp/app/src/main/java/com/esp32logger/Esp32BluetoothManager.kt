@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
+import android.content.Context
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -60,8 +61,11 @@ data class LoggerFrame(
  * - StateFlowによるViewModelへのデータ配信
  */
 class Esp32BluetoothManager(
+    private val context: Context,
     private val bluetoothAdapter: BluetoothAdapter
 ) {
+    // A-GPS制御用マネージャー
+    private val agpsManager = AgpsManager(context)
     // 接続状態のStateFlow（ViewModelがcollectする）
     private val _connectionStatus = MutableStateFlow<ConnectionStatus>(ConnectionStatus.Disconnected)
     val connectionStatus: StateFlow<ConnectionStatus> = _connectionStatus.asStateFlow()
@@ -149,6 +153,16 @@ class Esp32BluetoothManager(
             socket.connect()
 
             _connectionStatus.value = ConnectionStatus.Connected
+
+            // A-GPSアシストデータの送信（接続直後に一度だけ実行）
+            try {
+                agpsManager.getAgpsPayload()?.let { payload ->
+                    socket.outputStream.write(payload.toByteArray(Charsets.UTF_8))
+                    socket.outputStream.flush()
+                }
+            } catch (e: Exception) {
+                // アシスト送信エラーは通知ログに留めて接続自体は続行
+            }
 
             // 接続成功後、受信ループを開始
             startReadLoop(socket)

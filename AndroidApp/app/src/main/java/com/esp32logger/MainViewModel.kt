@@ -63,7 +63,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         .adapter
 
     // Bluetooth通信コアクラス
-    private val btManager = Esp32BluetoothManager(bluetoothAdapter)
+    private val btManager = Esp32BluetoothManager(application, bluetoothAdapter)
 
     // UI状態のStateFlow
     private val _uiState = MutableStateFlow(UiState())
