@@ -111,13 +111,23 @@ void core0Task(void* parameter) {
       SerialBT.print(finalCsv);
     }
 
-    // MicroSDカードへの追記保存 (log.txt)
-    File logFile = SD.open("/log.txt", FILE_WRITE);
-    if (logFile) {
-      logFile.print(finalCsv);
-      logFile.close();
-    } else {
-      Serial.println("[Core0] SDカードへの書き込みに失敗しました。");
+    // MicroSDカードへの追記保存 (10Hzでの頻繁な開閉を防ぐため、10回(1秒)分バッファリングして一気に書き込み)
+    static String sdBuffer = "";
+    static int sdBufferCount = 0;
+    
+    sdBuffer += finalCsv;
+    sdBufferCount++;
+    
+    if (sdBufferCount >= 10) {
+      File logFile = SD.open("/log.txt", FILE_WRITE);
+      if (logFile) {
+        logFile.print(sdBuffer);
+        logFile.close();
+      } else {
+        Serial.println("[Core0] SDカードへの書き込みに失敗しました。");
+      }
+      sdBuffer = "";
+      sdBufferCount = 0;
     }
 
     // 1秒間の高精度スリープ (Core 0を解放)
@@ -208,12 +218,16 @@ void loop() {
   // --- 直近4回分のパルス周期の移動平均フィルタ (SMA) ---
   static unsigned long intervalBuffer[4] = {0, 0, 0, 0};
   static int bufferIndex = 0;
+  static unsigned long lastProcessedPulseMicros = 0;
   unsigned long avgInterval = 0;
 
   if (activeInterval > 0) {
-    // 最新のパルス周期をバッファに追加
-    intervalBuffer[bufferIndex] = activeInterval;
-    bufferIndex = (bufferIndex + 1) % 4;
+    // 新しいパルスを検知した時のみバッファを更新 (多重登録バグの防止)
+    if (lastPulseMicros != lastProcessedPulseMicros) {
+      lastProcessedPulseMicros = lastPulseMicros;
+      intervalBuffer[bufferIndex] = activeInterval;
+      bufferIndex = (bufferIndex + 1) % 4;
+    }
 
     // バッファの平均を算出
     unsigned long sum = 0;
@@ -226,10 +240,11 @@ void loop() {
     }
     avgInterval = (count > 0) ? (sum / count) : 0;
   } else {
-    // タイムアウト時はバッファをクリア
+    // タイムアウト時はバッファと追跡値をクリア
     for (int i = 0; i < 4; i++) {
       intervalBuffer[i] = 0;
     }
+    lastProcessedPulseMicros = 0;
     avgInterval = 0;
   }
 
