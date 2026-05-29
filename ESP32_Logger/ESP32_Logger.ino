@@ -143,27 +143,23 @@ void processAgpsPacket(String packet) {
   String nmeaLat = convertToNmeaAngle(lat, false);
   String nmeaLon = convertToNmeaAngle(lon, true);
   
-  // ① u-blox 時刻初期化 ($PUBX,40)
-  String pubx40_payload = "PUBX,40," + timeStr + "," + dateStr + ",0,0,0,0,0,10";
-  byte cs40 = calculateChecksum(pubx40_payload);
-  char cs40Str[8];
-  sprintf(cs40Str, "*%02X", cs40);
-  String pubx40 = "$" + pubx40_payload + String(cs40Str);
+  // 標準NMEA $GPRMC センテンスを生成してGPSモジュールに注入する
+  // フォーマット: $GPRMC,時刻,A,緯度,N/S,経度,E/W,速度,方位,日付,,,A*チェックサム
+  // NEO-6MはこのセンテンスからUTC時刻・日付・位置を初期値として取り込む
+  String gprmcPayload = "GPRMC," + timeStr + ",A," +
+                        nmeaLat + "," + latDir + "," +
+                        nmeaLon + "," + lonDir + 
+                        ",0.000,0.000," + dateStr + ",,,A";
+  byte csGprmc = calculateChecksum(gprmcPayload);
+  char csGprmcStr[8];
+  sprintf(csGprmcStr, "*%02X", csGprmc);
+  String gprmc = "$" + gprmcPayload + String(csGprmcStr);
   
-  // ② u-blox 位置初期化 ($PUBX,41)
-  String pubx41_payload = "PUBX,41,0," + nmeaLat + "," + latDir + "," + nmeaLon + "," + lonDir + "," + String(alt, 1) + ",100,100";
-  byte cs41 = calculateChecksum(pubx41_payload);
-  char cs41Str[8];
-  sprintf(cs41Str, "*%02X", cs41);
-  String pubx41 = "$" + pubx41_payload + String(cs41Str);
+  // GPSモジュールへ書き込み（HardwareSerial2経由）
+  gpsSerial.println(gprmc);
   
-  // GPSモジュールへ書き込み
-  gpsSerial.println(pubx40);
-  gpsSerial.println(pubx41);
-  
-  Serial.println("[AGPS] スマホからアシストデータを受信し、GPSモジュールへ注入しました！");
-  Serial.print("  -> 時刻同期: "); Serial.println(pubx40);
-  Serial.print("  -> 位置同期: "); Serial.println(pubx41);
+  Serial.println("[AGPS] スマホからアシストデータを受信し、GPSモジュールへ$GPRMCを注入しました！");
+  Serial.print("  -> GPRMC: "); Serial.println(gprmc);
 }
 
 // ==========================================
@@ -173,6 +169,11 @@ void core0Task(void* parameter) {
   TickType_t lastWakeTime = xTaskGetTickCount();
   const TickType_t frequency = pdMS_TO_TICKS(100); // 100ms間隔 (10Hz)
 
+  // ミューテックス失敗時のフォールバック用に前回の安全なコピーを保持する
+  SensorData lastLocalCopy;
+  memset(&lastLocalCopy, 0, sizeof(SensorData));
+  strcpy(lastLocalCopy.utc_time, "00:00:00");
+
   for (;;) {
     SensorData localCopy;
 
@@ -180,9 +181,10 @@ void core0Task(void* parameter) {
     if (xSemaphoreTake(dataMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
       localCopy = sharedData;
       xSemaphoreGive(dataMutex);
+      lastLocalCopy = localCopy; // 安全に取得できた場合のみ更新
     } else {
-      // ミューテックス取得に失敗した場合は、前回のデータを流用
-      localCopy = sharedData;
+      // ミューテックス取得に失敗した場合は、前回の安全なコピーを流用（アンセーフアクセス防止）
+      localCopy = lastLocalCopy;
     }
 
     // CSV文字列の生成 ([pulse_us],[速度],[緯度],[経度],[UTC時刻])
@@ -243,7 +245,7 @@ void core0Task(void* parameter) {
     
     if (sdBufferCount >= 10) {
       if (sdInitialized) {
-        File logFile = SD.open("/log.txt", FILE_WRITE);
+        File logFile = SD.open("/log.txt", FILE_APPEND);
         if (logFile) {
           logFile.print(sdBuffer);
           logFile.close();

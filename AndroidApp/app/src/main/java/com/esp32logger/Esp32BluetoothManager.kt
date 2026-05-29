@@ -117,101 +117,104 @@ class Esp32BluetoothManager(
 
     /**
      * 内部接続処理（自動再接続ループを含む）
-     * @param reconnectAttempt 再接続試行回数（初回接続は0）
+     * whileループで再帰なしに実装し、スタックオーバーフローリスクを排除
      */
     @SuppressLint("MissingPermission")
     private suspend fun connectInternal(reconnectAttempt: Int) {
-        _connectionStatus.value = if (reconnectAttempt == 0)
-            ConnectionStatus.Connecting
-        else
-            ConnectionStatus.Reconnecting(reconnectAttempt)
+        var attempt = reconnectAttempt
 
-        // ペアリング済みデバイスの中から ESP32_Logger を探す
-        val device: BluetoothDevice? = bluetoothAdapter.bondedDevices
-            .firstOrNull { it.name == TARGET_DEVICE_NAME }
+        while (managerScope.isActive) {
+            _connectionStatus.value = if (attempt == 0)
+                ConnectionStatus.Connecting
+            else
+                ConnectionStatus.Reconnecting(attempt)
 
-        if (device == null) {
-            _connectionStatus.value = ConnectionStatus.Error(
-                "「$TARGET_DEVICE_NAME」がペアリングリストに見つかりません。先にBluetooth設定でペアリングしてください。"
-            )
-            return
-        }
+            // ペアリング済みデバイスの中から ESP32_Logger を探す
+            val device: BluetoothDevice? = bluetoothAdapter.bondedDevices
+                .firstOrNull { it.name == TARGET_DEVICE_NAME }
 
-        try {
-            // 既存ソケットがあれば閉じる
-            closeSocket()
+            if (device == null) {
+                _connectionStatus.value = ConnectionStatus.Error(
+                    "「$TARGET_DEVICE_NAME」がペアリングリストに見つかりません。先にBluetooth設定でペアリングしてください。"
+                )
+                return
+            }
 
-            // SPP UUIDでソケットを作成し接続
-            // ※ createRfcommSocketToServiceRecord はブロッキング処理のため IO Dispatcher で実行
-            val socket = device.createRfcommSocketToServiceRecord(SPP_UUID)
-            bluetoothSocket = socket
-
-            // Bluetooth検出中のスキャンを止めて接続を安定させる
-            bluetoothAdapter.cancelDiscovery()
-
-            // ブロッキング接続（IO Dispatcher内なのでUIに影響なし）
-            socket.connect()
-
-            _connectionStatus.value = ConnectionStatus.Connected
-
-            // A-GPSアシストデータの送信（接続直後に一度だけ実行）
             try {
-                agpsManager.getAgpsPayload()?.let { payload ->
-                    socket.outputStream.write(payload.toByteArray(Charsets.UTF_8))
-                    socket.outputStream.flush()
+                // 既存ソケットがあれば閉じる
+                closeSocket()
+
+                // SPP UUIDでソケットを作成し接続
+                val socket = device.createRfcommSocketToServiceRecord(SPP_UUID)
+                bluetoothSocket = socket
+
+                // Bluetooth検出中のスキャンを止めて接続を安定させる
+                bluetoothAdapter.cancelDiscovery()
+
+                // ブロッキング接続（IO Dispatcher内なのでUIに影響なし）
+                socket.connect()
+
+                _connectionStatus.value = ConnectionStatus.Connected
+
+                // A-GPSアシストデータの送信（接続直後に一度だけ実行）
+                try {
+                    agpsManager.getAgpsPayload()?.let { payload ->
+                        socket.outputStream.write(payload.toByteArray(Charsets.UTF_8))
+                        socket.outputStream.flush()
+                    }
+                } catch (e: Exception) {
+                    // アシスト送信エラーは通知ログに留めて接続自体は続行
                 }
-            } catch (e: Exception) {
-                // アシスト送信エラーは通知ログに留めて接続自体は続行
+
+                // 接続成功後、受信ループを実行（ブロッキング）
+                runReadLoop(socket)
+
+                // readLoopが正常終了（= ユーザーが切断した場合）はそのままwhileを抜ける
+                if (_connectionStatus.value is ConnectionStatus.Disconnected) return
+
+            } catch (e: IOException) {
+                // 接続失敗時は5秒後に再接続を試みる
+                closeSocket()
             }
 
-            // 接続成功後、受信ループを開始
-            startReadLoop(socket)
-
-        } catch (e: IOException) {
-            // 接続失敗時は5秒後に再接続を試みる
-            closeSocket()
-            _connectionStatus.value = ConnectionStatus.Reconnecting(reconnectAttempt + 1)
-
+            // 接続が切れた場合は再接続カウントを増やして待機
+            attempt++
+            _connectionStatus.value = ConnectionStatus.Reconnecting(attempt)
             delay(RECONNECT_DELAY_MS)
-
-            // コルーチンがキャンセルされていなければ再試行
-            if (managerScope.isActive) {
-                connectInternal(reconnectAttempt + 1)
-            }
         }
     }
 
     /**
-     * InputStreamを継続的に読み込むメインループ
-     * InputStream.readLine() はブロッキング処理のため IO Dispatcher で実行する
-     * 切断検知時は自動で再接続ロジックへ移行する
+     * InputStreamを継続的に読み込むメインループ（ブロッキング・同期実行）
+     * 切断検知時はこのメソッドから返り、呼び出し元のwhileループが再接続を担当する
+     */
+    private suspend fun runReadLoop(socket: BluetoothSocket) {
+        try {
+            val reader = BufferedReader(
+                InputStreamReader(socket.inputStream),
+                1024 // バッファサイズ: 1KB
+            )
+
+            while (managerScope.isActive) {
+                val line = reader.readLine() ?: break
+
+                // チェックサム検証とパース処理
+                parseAndValidateFrame(line)?.let { frame ->
+                    _latestFrame.value = frame
+                }
+            }
+        } catch (e: IOException) {
+            // 切断検知: 呼び出し元に返して再接続ループへ
+        }
+    }
+
+    /**
+     * InputStreamを継続的に読み込むメインループ（後方互換ラッパー）
+     * @deprecated runReadLoopに統合済み。このメソッドは使用されない。
      */
     private fun startReadLoop(socket: BluetoothSocket) {
         readJob = managerScope.launch {
-            try {
-                // BufferedReaderで行単位の読み込みを効率化
-                val reader = BufferedReader(
-                    InputStreamReader(socket.inputStream),
-                    1024 // バッファサイズ: 1KB
-                )
-
-                while (isActive) {
-                    // ブロッキング読み込み（切断時にIOExceptionがスローされる）
-                    val line = reader.readLine() ?: break
-
-                    // チェックサム検証とパース処理
-                    parseAndValidateFrame(line)?.let { frame ->
-                        _latestFrame.value = frame
-                    }
-                }
-            } catch (e: IOException) {
-                // 切断検知: 自動再接続ループを開始する
-                if (isActive) {
-                    _connectionStatus.value = ConnectionStatus.Reconnecting(1)
-                    delay(RECONNECT_DELAY_MS)
-                    connectInternal(reconnectAttempt = 1)
-                }
-            }
+            runReadLoop(socket)
         }
     }
 

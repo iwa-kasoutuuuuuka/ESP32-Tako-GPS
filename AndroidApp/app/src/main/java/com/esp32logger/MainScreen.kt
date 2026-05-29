@@ -1,6 +1,7 @@
 package com.esp32logger
 
 import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -31,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlin.math.*
 
@@ -54,8 +56,20 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
     }
 
     // =========================================
-    // Bluetooth権限リクエスト (Android 12以上)
+    // Bluetooth権限リクエスト
     // =========================================
+    // SPP接続に必要な権限リスト（BLUETOOTH_SCANはペアリング済み接続には不要）
+    val requiredPermissions = remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            arrayOf(
+                Manifest.permission.BLUETOOTH_CONNECT,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            )
+        } else {
+            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+    }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -165,24 +179,16 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
                 isLogging = uiState.isLogging,
                 logFilePath = uiState.logFilePath,
                 onConnectClick = {
-                    // Android 12以上はBluetooth＋位置情報を要求、Android 11以下は位置情報のみ要求
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        permissionLauncher.launch(
-                            arrayOf(
-                                Manifest.permission.BLUETOOTH_CONNECT,
-                                Manifest.permission.BLUETOOTH_SCAN,
-                                Manifest.permission.ACCESS_FINE_LOCATION,
-                                Manifest.permission.ACCESS_COARSE_LOCATION
-                            )
-                        )
+                    // 権限が既に付与済みかチェック（2回目以降は直接接続）
+                    val allGranted = requiredPermissions.all { perm ->
+                        ContextCompat.checkSelfPermission(context, perm) ==
+                                PackageManager.PERMISSION_GRANTED
+                    }
+                    if (allGranted) {
+                        viewModel.connect()
                     } else {
-                        // Android 11以下でも位置情報権限の許可を求める
-                        permissionLauncher.launch(
-                            arrayOf(
-                                Manifest.permission.ACCESS_FINE_LOCATION,
-                                Manifest.permission.ACCESS_COARSE_LOCATION
-                            )
-                        )
+                        // 未付与の権限があればダイアログを表示
+                        permissionLauncher.launch(requiredPermissions)
                     }
                 },
                 onDisconnectClick = { viewModel.disconnect() },
