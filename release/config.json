@@ -1,5 +1,5 @@
 {
   "SaveDirectory": "E:\\app\\ESP32\\release\\",
-  "PulsePerRevolution": 0.5,
+  "PulsePerRevolution": 1,
   "LastComPort": "COM5"
 }
