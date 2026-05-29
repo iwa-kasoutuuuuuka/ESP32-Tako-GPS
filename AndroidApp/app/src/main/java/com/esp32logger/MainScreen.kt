@@ -165,16 +165,24 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
                 isLogging = uiState.isLogging,
                 logFilePath = uiState.logFilePath,
                 onConnectClick = {
-                    // Android 12以上はBluetooth権限を動的に要求
+                    // Android 12以上はBluetooth＋位置情報を要求、Android 11以下は位置情報のみ要求
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                         permissionLauncher.launch(
                             arrayOf(
                                 Manifest.permission.BLUETOOTH_CONNECT,
-                                Manifest.permission.BLUETOOTH_SCAN
+                                Manifest.permission.BLUETOOTH_SCAN,
+                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                Manifest.permission.ACCESS_COARSE_LOCATION
                             )
                         )
                     } else {
-                        viewModel.connect()
+                        // Android 11以下でも位置情報権限の許可を求める
+                        permissionLauncher.launch(
+                            arrayOf(
+                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                Manifest.permission.ACCESS_COARSE_LOCATION
+                            )
+                        )
                     }
                 },
                 onDisconnectClick = { viewModel.disconnect() },

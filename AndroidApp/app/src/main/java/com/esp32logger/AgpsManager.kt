@@ -23,33 +23,34 @@ class AgpsManager(private val context: Context) {
      */
     @SuppressLint("MissingPermission")
     fun getAgpsPayload(): String? {
-        val location = getLastKnownLocation() ?: return null
-        
-        val lat = location.latitude
-        val lon = location.longitude
-        val alt = location.altitude
+        return try {
+            val location = getLastKnownLocation() ?: return null
+            
+            val lat = location.latitude
+            val lon = location.longitude
+            val alt = location.altitude
 
-        // NMEA $PUBX が要求するUTC形式（時刻: HHMMSS.00, 日付: DDMMYY）
-        val utcFormatTime = SimpleDateFormat("HHmmss.00", Locale.US).apply {
-            timeZone = TimeZone.getTimeZone("UTC")
-        }
-        val utcFormatDate = SimpleDateFormat("ddMMyy", Locale.US).apply {
-            timeZone = TimeZone.getTimeZone("UTC")
-        }
-        
-        // 端末時刻ではなくGPSで最後に取得した時間を使用
-        val gpsTime = Date(location.time)
-        val timeStr = utcFormatTime.format(gpsTime)
-        val dateStr = utcFormatDate.format(gpsTime)
+            val utcFormatTime = SimpleDateFormat("HHmmss.00", Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+            }
+            val utcFormatDate = SimpleDateFormat("ddMMyy", Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+            }
+            
+            val gpsTime = Date(location.time)
+            val timeStr = utcFormatTime.format(gpsTime)
+            val dateStr = utcFormatDate.format(gpsTime)
 
-        // アシストCSVデータ部の構築 (AGPSヘッダー、緯度、経度、高度、日付、時刻)
-        val payload = String.format(Locale.US, "AGPS,%.6f,%.6f,%.1f,%s,%s", lat, lon, alt, dateStr, timeStr)
-        
-        // XOR演算によるチェックサム算出 (NMEA-0183準拠)
-        val checksum = payload.fold(0) { acc, c -> acc xor c.code }
-        val checksumStr = String.format("%02X", checksum)
-        
-        return "$$payload*$checksumStr\n"
+            val payload = String.format(Locale.US, "AGPS,%.6f,%.6f,%.1f,%s,%s", lat, lon, alt, dateStr, timeStr)
+            
+            val checksum = payload.fold(0) { acc, c -> acc xor c.code }
+            val checksumStr = String.format("%02X", checksum)
+            
+            "$$payload*$checksumStr\n"
+        } catch (e: Exception) {
+            // 権限拒否時のSecurityException等を完全に保護し、安全にnull(アシストなし)を返す
+            null
+        }
     }
 
     /**
@@ -57,14 +58,18 @@ class AgpsManager(private val context: Context) {
      */
     @SuppressLint("MissingPermission")
     private fun getLastKnownLocation(): Location? {
-        val providers = locationManager.getProviders(true)
-        var bestLocation: Location? = null
-        for (provider in providers) {
-            val l = locationManager.getLastKnownLocation(provider) ?: continue
-            if (bestLocation == null || l.time > bestLocation.time) {
-                bestLocation = l
+        return try {
+            val providers = locationManager.getProviders(true)
+            var bestLocation: Location? = null
+            for (provider in providers) {
+                val l = locationManager.getLastKnownLocation(provider) ?: continue
+                if (bestLocation == null || l.time > bestLocation.time) {
+                    bestLocation = l
+                }
             }
+            bestLocation
+        } catch (e: Exception) {
+            null
         }
-        return bestLocation
     }
 }

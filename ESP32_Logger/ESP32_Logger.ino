@@ -220,6 +220,10 @@ void core0Task(void* parameter) {
         btBuffer = "";
       } else if (c != '\r') {
         btBuffer += c;
+        // バッファオーバーフロー防止（128文字を超えたらクリア）
+        if (btBuffer.length() > 128) {
+          btBuffer = "";
+        }
       }
     }
 
