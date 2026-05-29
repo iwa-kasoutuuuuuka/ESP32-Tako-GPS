@@ -25,6 +25,9 @@ namespace ESP32LoggerWin
         private StreamWriter? _logFileWriter;
         private string _currentLogFilePath = string.Empty;
 
+        // シリアル受信用のバッファ（改行で分割するためのストリームバッファ）
+        private readonly StringBuilder _serialBuffer = new();
+
         public MainWindow()
         {
             InitializeComponent();
@@ -97,7 +100,7 @@ namespace ESP32LoggerWin
 
         private void LogWindowButton_Click(object sender, RoutedEventArgs e)
         {
-            if (_logWindow == null || !_logWindow.IsLoaded)
+            if (_logWindow == null)
             {
                 _logWindow = new LogWindow();
             }
@@ -105,8 +108,11 @@ namespace ESP32LoggerWin
             _logWindow.Activate();
         }
 
+        // データ受信フラグ（デバッグ用：接続後にデータが到着したか判定）
+        private volatile bool _dataReceived = false;
+
         /// <summary>
-        /// 接続処理
+        /// 接続処理。選択ポートで失敗した場合、他のCOMポートへ自動フォールバックを試みる。
         /// </summary>
         private void ConnectButton_Click(object sender, RoutedEventArgs e)
         {
@@ -118,15 +124,54 @@ namespace ESP32LoggerWin
 
             string selectedPort = ComPortComboBox.SelectedItem.ToString()!;
 
+            // 試行するポートリストを構築（選択ポートを先頭に、他のポートをフォールバックとして追加）
+            var portsToTry = new System.Collections.Generic.List<string> { selectedPort };
+            foreach (var item in ComPortComboBox.Items)
+            {
+                string port = item.ToString()!;
+                if (port != selectedPort) portsToTry.Add(port);
+            }
+
+            foreach (string port in portsToTry)
+            {
+                if (TryConnect(port))
+                {
+                    // UIのCOMポート選択を実際に接続されたポートに合わせる
+                    if (ComPortComboBox.Items.Contains(port))
+                    {
+                        ComPortComboBox.SelectedItem = port;
+                    }
+                    return;
+                }
+            }
+
+            MessageBox.Show("利用可能なすべてのCOMポートへの接続に失敗しました。\n\n" +
+                            "以下を確認してください:\n" +
+                            "・ESP32の電源がONであること\n" +
+                            "・WindowsのBluetooth設定でESP32_Loggerがペアリング済みであること\n" +
+                            "・他のアプリがCOMポートを使用していないこと",
+                            "接続エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+
+        /// <summary>
+        /// 指定ポートへの接続を試行する。成功すればtrue、失敗すればfalseを返す。
+        /// </summary>
+        private bool TryConnect(string portName)
+        {
             try
             {
                 DisconnectInternal();
+                _dataReceived = false;
 
-                _serialPort = new SerialPort(selectedPort, 115200, Parity.None, 8, StopBits.One)
+                _logWindow?.AppendLog($"[SYSTEM] COMポート {portName} への接続を試行中...");
+
+                _serialPort = new SerialPort(portName, 115200, Parity.None, 8, StopBits.One)
                 {
-                    ReadTimeout = 2000,
+                    ReadTimeout = 500,
                     WriteTimeout = 2000,
-                    NewLine = "\n"
+                    Encoding = Encoding.ASCII,
+                    DtrEnable = true,
+                    RtsEnable = true
                 };
 
                 _serialPort.DataReceived += SerialPort_DataReceived;
@@ -136,24 +181,41 @@ namespace ESP32LoggerWin
                 ConnectButton.IsEnabled = false;
                 DisconnectButton.IsEnabled = true;
                 ComPortComboBox.IsEnabled = false;
-                BtLed.Fill = NeonGreen; // 接続LED点灯
+                BtLed.Fill = NeonGreen;
 
                 // 設定の永続化
-                _config.LastComPort = selectedPort;
+                _config.LastComPort = portName;
                 _config.Save();
 
-                _logWindow?.AppendLog($"[SYSTEM] COMポート {selectedPort} に接続しました。");
+                _logWindow?.AppendLog($"[SYSTEM] COMポート {portName} に接続しました。");
 
                 // ロギングCSVの作成
                 StartLocalLogging();
 
-                // A-GPS同期アシストデータの送信（接続直後に一回送信）
-                SendAgpsAssistData();
+                // A-GPS送信を非同期で実行（UIをブロックしない）
+                ThreadPool.QueueUserWorkItem(_ => SendAgpsAssistData());
+
+                // 5秒後にデータ受信チェック（データが来ていなければガイダンスを表示）
+                var checkTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+                checkTimer.Tick += (s, args) =>
+                {
+                    checkTimer.Stop();
+                    if (!_dataReceived && _serialPort != null && _serialPort.IsOpen)
+                    {
+                        _logWindow?.AppendLog("[WARNING] 接続から5秒経過しましたが、ESP32からのデータを受信していません。");
+                        _logWindow?.AppendLog("[WARNING] ESP32が正常に動作しているか、COMポートが正しいか確認してください。");
+                        _logWindow?.AppendLog($"[INFO] 現在の接続ポート: {portName}");
+                    }
+                };
+                checkTimer.Start();
+
+                return true;
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"接続に失敗しました: {ex.Message}", "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+                _logWindow?.AppendLog($"[ERROR] {portName} への接続失敗: {ex.Message}");
                 DisconnectInternal();
+                return false;
             }
         }
 
@@ -249,7 +311,9 @@ namespace ESP32LoggerWin
         }
 
         /// <summary>
-        /// シリアルポートのデータ受信イベントハンドラ
+        /// シリアルポートのデータ受信イベントハンドラ。
+        /// ReadLine()のブロッキング問題を回避するため、生バイトを読み取り
+        /// 手動で改行(\n)で分割してパースする方式を採用。
         /// </summary>
         private void SerialPort_DataReceived(object sender, SerialDataReceivedEventArgs e)
         {
@@ -257,21 +321,54 @@ namespace ESP32LoggerWin
 
             try
             {
-                while (_serialPort.BytesToRead > 0)
+                int bytesAvailable = _serialPort.BytesToRead;
+                if (bytesAvailable <= 0) return;
+
+                // データ受信フラグを立てる（接続後のチェックタイマー用）
+                _dataReceived = true;
+
+                // 利用可能なバイトを一括で読み取る（非ブロッキング）
+                byte[] buffer = new byte[bytesAvailable];
+                int bytesRead = _serialPort.Read(buffer, 0, bytesAvailable);
+                string chunk = Encoding.ASCII.GetString(buffer, 0, bytesRead);
+
+                // デバッグ: 受信した生データをログに表示
+                _logWindow?.AppendLog($"[DEBUG RX] {bytesRead}bytes: {chunk.Replace("\r", "<CR>").Replace("\n", "<LF>")}");
+
+                // バッファに追記し、改行(\n)で分割して行単位で処理
+                _serialBuffer.Append(chunk);
+
+                string bufferStr = _serialBuffer.ToString();
+                int newlineIdx;
+                while ((newlineIdx = bufferStr.IndexOf('\n')) >= 0)
                 {
-                    string line = _serialPort.ReadLine();
-                    if (string.IsNullOrWhiteSpace(line)) continue;
+                    string line = bufferStr.Substring(0, newlineIdx).TrimEnd('\r');
+                    bufferStr = bufferStr.Substring(newlineIdx + 1);
 
-                    // 生ログウィンドウに表示
-                    _logWindow?.AppendLog(line.Trim());
+                    if (!string.IsNullOrWhiteSpace(line))
+                    {
+                        // 生ログウィンドウに完成行を表示
+                        _logWindow?.AppendLog(line);
 
-                    // パース処理
-                    ParseDataLine(line);
+                        // パース処理
+                        ParseDataLine(line);
+                    }
+                }
+
+                // 未処理の残りをバッファに戻す
+                _serialBuffer.Clear();
+                _serialBuffer.Append(bufferStr);
+
+                // バッファが異常に大きくなった場合の保護（1KB超えたらクリア）
+                if (_serialBuffer.Length > 1024)
+                {
+                    _logWindow?.AppendLog("[DEBUG] バッファオーバーフロー検知。クリアします。");
+                    _serialBuffer.Clear();
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // 受信中のタイムアウト等は無視
+                _logWindow?.AppendLog($"[DEBUG ERROR] 受信例外: {ex.Message}");
             }
         }
 
@@ -482,10 +579,18 @@ namespace ESP32LoggerWin
             DisconnectInternal();
             if (_logWindow != null)
             {
-                // 強制的にクローズしてアプリケーション終了を許可
-                _logWindow.Closing -= (s, ev) => ev.Cancel = true;
-                _logWindow.Close();
+                // 生ログウィンドウをクローズ (裏でHideされているのを解除)
+                try
+                {
+                    _logWindow.Close();
+                }
+                catch { }
             }
+
+            // シリアルポートのスレッド残留や、非表示ウィンドウの残りによる
+            // プロセスのゾンビ化（バックグラウンドで残り続ける問題）を完全に防止するため、
+            // プロセス全体の終了を明示的に宣言します。
+            Environment.Exit(0);
         }
 
         #endregion

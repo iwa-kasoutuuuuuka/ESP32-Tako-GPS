@@ -321,13 +321,15 @@ void setup() {
   Serial.println("GPSシリアル通信(HardwareSerial2)を起動しました。");
 
   // Bluetoothの起動（PINコードを設定して無認証接続を防止）
-  const char* BT_PIN = "1234";
-  SerialBT.setPin(BT_PIN, strlen(BT_PIN)); // 接続に必要なPINコード（4桁）
+  // ※特定のOS（Windows 10/11等）において、PIN（setPin）を設定するとペアリングや接続が失敗する問題があるため、
+  //   接続障害を防ぐためにデフォルトではPINコードを無効化します。
+  // const char* BT_PIN = "1234";
+  // SerialBT.setPin(BT_PIN, strlen(BT_PIN)); // 接続に必要なPINコード（4桁）
   if (!SerialBT.begin("ESP32_Logger")) {
     Serial.println("Bluetoothの初期化に失敗しました。再起動します。");
     ESP.restart();
   }
-  Serial.println("Bluetoothデバイス 「ESP32_Logger」 起動完了 (PIN: 1234)");
+  Serial.println("Bluetoothデバイス 「ESP32_Logger」 起動完了 (PIN無効化)");
 
   // SPI通信およびMicroSDカードの初期化
   SPI.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, SD_CS_PIN);

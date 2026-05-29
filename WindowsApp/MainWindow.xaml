@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="ESP32 多機能データロガー ダッシュボード" Height="500" Width="950"
+        Title="ESP32 多機能データロガー ダッシュボード" Height="500" Width="950" Icon="app_icon.ico"
         Background="#0E1117" Foreground="#E2E8F0"
         WindowStartupLocation="CenterScreen"
         Closing="Window_Closing">
