@@ -37,33 +37,33 @@
             <Grid>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <!-- Bluetooth 接続ランプ -->
-                    <StackPanel Orientation="Horizontal" Margin="0,0,20,0" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,22,0" VerticalAlignment="Center">
                         <Ellipse x:Name="BtLed" Style="{StaticResource NeonLed}" Fill="#4F5D73"/>
-                        <TextBlock Text="BT接続" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="#8B949E"/>
+                        <TextBlock Text="BT接続" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" Foreground="#FFFFFF"/>
                     </StackPanel>
                     
                     <!-- GPS 受信ランプ -->
-                    <StackPanel Orientation="Horizontal" Margin="0,0,20,0" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,22,0" VerticalAlignment="Center">
                         <Ellipse x:Name="GpsLed" Style="{StaticResource NeonLed}" Fill="#4F5D73"/>
-                        <TextBlock Text="GPS受信" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="#8B949E"/>
+                        <TextBlock Text="GPS受信" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" Foreground="#FFFFFF"/>
                     </StackPanel>
 
                     <!-- GPS アンテナ接続ランプ -->
-                    <StackPanel Orientation="Horizontal" Margin="0,0,20,0" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,22,0" VerticalAlignment="Center">
                         <Ellipse x:Name="AntennaLed" Style="{StaticResource NeonLed}" Fill="#4F5D73"/>
-                        <TextBlock Text="アンテナ接続" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="#8B949E"/>
+                        <TextBlock Text="アンテナ接続" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" Foreground="#FFFFFF"/>
                     </StackPanel>
 
                     <!-- 衛星捕捉数表示 -->
-                    <TextBlock x:Name="SatellitesText" Text="捕捉衛星: 0" FontSize="11" Foreground="#58A6FF" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="SatellitesText" Text="捕捉衛星: 0 (未測位)" FontSize="13" FontWeight="SemiBold" Foreground="#58A6FF" VerticalAlignment="Center" Margin="10,0,0,0"/>
                     <!-- UTC時刻表示 -->
-                    <TextBlock x:Name="UtcTimeText" Text="UTC時刻: --:--:--" FontSize="11" Foreground="#8B949E" Margin="20,0,0,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="UtcTimeText" Text="UTC時刻: --:--:--" FontSize="13" FontWeight="SemiBold" Foreground="#FFFFFF" Margin="25,0,0,0" VerticalAlignment="Center"/>
                 </StackPanel>
 
                 <!-- 右側: ログウィンドウ開閉ボタン -->
-                <Button Content="生ログモニター表示" HorizontalAlignment="Right" Width="130" Height="28"
-                        Click="LogWindowButton_Click" Background="#21262D" Foreground="#C9D1D9" 
-                        BorderBrush="#30363D" Cursor="Hand">
+                <Button Content="生ログモニター表示" HorizontalAlignment="Right" Width="140" Height="30"
+                        Click="LogWindowButton_Click" Background="#21262D" Foreground="#FFFFFF" FontWeight="Bold"
+                        BorderBrush="#8B949E" Cursor="Hand">
                     <Button.Resources>
                         <Style TargetType="Border">
                             <Setter Property="CornerRadius" Value="6"/>
@@ -115,22 +115,20 @@
                                 </Line.RenderTransform>
                             </Line>
                             <Ellipse Width="14" Height="14" Canvas.Left="93" Canvas.Top="93" Fill="#FF453A"/>
-
-                            <!-- 中央のデジタル表示 -->
                             <StackPanel Canvas.Left="60" Canvas.Top="115" Width="80" HorizontalAlignment="Center">
                                 <TextBlock x:Name="SpeedText" Text="0.0" FontSize="26" FontWeight="Bold" Foreground="#FFFFFF" HorizontalAlignment="Center"/>
-                                <TextBlock Text="km/h" FontSize="10" Foreground="#8B949E" HorizontalAlignment="Center"/>
+                                <TextBlock Text="km/h" FontSize="13" FontWeight="Bold" Foreground="#FFFFFF" HorizontalAlignment="Center"/>
                             </StackPanel>
                         </Canvas>
                     </Viewbox>
 
                     <!-- スピードメーター下の最高速表示とリセットボタン -->
                     <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
-                        <TextBlock Text="最高速: " FontSize="14" Foreground="#8B949E" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="MaxSpeedText" Text="0.0" FontSize="18" FontWeight="Bold" Foreground="#FFD60A" VerticalAlignment="Center"/>
-                        <TextBlock Text=" km/h" FontSize="12" Foreground="#8B949E" VerticalAlignment="Center" Margin="0,0,15,0"/>
-                        <Button Content="リセット" Click="ResetMaxSpeed_Click" Width="65" Height="25"
-                                Background="#30363D" Foreground="#F0F6FC" BorderBrush="#8B949E" Cursor="Hand">
+                        <TextBlock Text="最高速: " FontSize="16" FontWeight="SemiBold" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="MaxSpeedText" Text="0.0" FontSize="20" FontWeight="Bold" Foreground="#FFD60A" VerticalAlignment="Center"/>
+                        <TextBlock Text=" km/h" FontSize="14" FontWeight="SemiBold" Foreground="#FFFFFF" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                        <Button Content="リセット" Click="ResetMaxSpeed_Click" Width="70" Height="26" FontWeight="Bold"
+                                Background="#30363D" Foreground="#FFFFFF" BorderBrush="#8B949E" Cursor="Hand">
                             <Button.Resources>
                                 <Style TargetType="Border">
                                     <Setter Property="CornerRadius" Value="4"/>
@@ -178,21 +176,21 @@
                             <!-- 中央のデジタル表示 -->
                             <StackPanel Canvas.Left="55" Canvas.Top="115" Width="90" HorizontalAlignment="Center">
                                 <TextBlock x:Name="RpmText" Text="0" FontSize="26" FontWeight="Bold" Foreground="#FFFFFF" HorizontalAlignment="Center"/>
-                                <TextBlock Text="r/min (RPM)" FontSize="10" Foreground="#8B949E" HorizontalAlignment="Center"/>
+                                <TextBlock Text="r/min (RPM)" FontSize="13" FontWeight="Bold" Foreground="#FFFFFF" HorizontalAlignment="Center"/>
                             </StackPanel>
                         </Canvas>
                     </Viewbox>
 
                     <!-- タコメーター下のPPR設定（パルス補正） -->
                     <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
-                        <TextBlock Text="PPR補正 (パルス/回転): " FontSize="13" Foreground="#8B949E" VerticalAlignment="Center"/>
-                        <ComboBox x:Name="PprComboBox" Width="90" Height="25" SelectedIndex="0" SelectionChanged="PprComboBox_SelectionChanged"
-                                  Background="#21262D" Foreground="#F0F6FC" BorderBrush="#30363D">
-                            <ComboBoxItem Content="0.5 (4st単)" Tag="0.5"/>
-                            <ComboBoxItem Content="1.0 (2st単)" Tag="1.0"/>
-                            <ComboBoxItem Content="2.0 (マルチ)" Tag="2.0"/>
-                            <ComboBoxItem Content="3.0" Tag="3.0"/>
-                            <ComboBoxItem Content="4.0" Tag="4.0"/>
+                        <TextBlock Text="PPR補正 (パルス/回転): " FontSize="15" FontWeight="SemiBold" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                        <ComboBox x:Name="PprComboBox" Width="110" Height="28" SelectedIndex="0" SelectionChanged="PprComboBox_SelectionChanged"
+                                  Background="#21262D" Foreground="#FFFFFF" FontSize="13" FontWeight="Bold" BorderBrush="#8B949E">
+                            <ComboBoxItem Content="0.5 (4st単)" Tag="0.5" Foreground="#000000"/>
+                            <ComboBoxItem Content="1.0 (2st単)" Tag="1.0" Foreground="#000000"/>
+                            <ComboBoxItem Content="2.0 (マルチ)" Tag="2.0" Foreground="#000000"/>
+                            <ComboBoxItem Content="3.0" Tag="3.0" Foreground="#000000"/>
+                            <ComboBoxItem Content="4.0" Tag="4.0" Foreground="#000000"/>
                         </ComboBox>
                     </StackPanel>
                 </Grid>
@@ -211,22 +209,30 @@
 
                 <!-- 左側：COM接続設定 -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="接続ポート:" FontSize="13" Foreground="#8B949E" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <ComboBox x:Name="ComPortComboBox" Width="100" Height="26" Margin="0,0,8,0"
-                              Background="#21262D" Foreground="#F0F6FC" BorderBrush="#30363D" DropDownOpened="ComPortComboBox_DropDownOpened"/>
-                    <Button x:Name="ConnectButton" Content="接続" Click="ConnectButton_Click" Width="65" Height="26" Margin="0,0,5,0"
-                            Background="#238636" Foreground="#FFFFFF" BorderBrush="#2EA44F" FontWeight="Bold" Cursor="Hand"/>
-                    <Button x:Name="DisconnectButton" Content="切断" Click="DisconnectButton_Click" Width="65" Height="26" IsEnabled="False"
-                            Background="#DA3633" Foreground="#FFFFFF" BorderBrush="#F85149" FontWeight="Bold" Cursor="Hand"/>
+                    <TextBlock Text="接続ポート (Bluetooth COM):" FontSize="14" FontWeight="Bold" Foreground="#FFFFFF" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <ComboBox x:Name="ComPortComboBox" Width="100" Height="28" Margin="0,0,8,0" FontSize="13" FontWeight="Bold"
+                              Background="#21262D" Foreground="#FFFFFF" BorderBrush="#8B949E" DropDownOpened="ComPortComboBox_DropDownOpened">
+                        <ComboBox.Resources>
+                            <!-- コンボボックス内アイテムのフォントカラーを黒に統一して選択リストを完全に見やすくする -->
+                            <Style TargetType="ComboBoxItem">
+                                <Setter Property="Foreground" Value="#000000"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                            </Style>
+                        </ComboBox.Resources>
+                    </ComboBox>
+                    <Button x:Name="ConnectButton" Content="接続" Click="ConnectButton_Click" Width="70" Height="28" Margin="0,0,5,0"
+                            Background="#238636" Foreground="#FFFFFF" BorderBrush="#2EA44F" FontSize="13" FontWeight="Bold" Cursor="Hand"/>
+                    <Button x:Name="DisconnectButton" Content="切断" Click="DisconnectButton_Click" Width="70" Height="28" IsEnabled="False"
+                            Background="#DA3633" Foreground="#FFFFFF" BorderBrush="#F85149" FontSize="13" FontWeight="Bold" Cursor="Hand"/>
                 </StackPanel>
 
                 <!-- 右側：データ保存先設定 -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                    <TextBlock Text="ログ保存フォルダ:" FontSize="13" Foreground="#8B949E" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <TextBox x:Name="SaveDirTextBox" Width="280" Height="26" IsReadOnly="True" Margin="0,0,8,0"
-                             Background="#0D1117" Foreground="#C9D1D9" BorderBrush="#30363D" VerticalContentAlignment="Center" Padding="5,0,5,0"/>
-                    <Button Content="参照..." Click="BrowseFolder_Click" Width="65" Height="26"
-                            Background="#21262D" Foreground="#C9D1D9" BorderBrush="#30363D" Cursor="Hand"/>
+                    <TextBlock Text="ログ保存フォルダ:" FontSize="14" FontWeight="Bold" Foreground="#FFFFFF" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBox x:Name="SaveDirTextBox" Width="280" Height="28" IsReadOnly="True" Margin="0,0,8,0" FontSize="13" FontWeight="SemiBold"
+                             Background="#0D1117" Foreground="#FFFFFF" BorderBrush="#8B949E" VerticalContentAlignment="Center" Padding="5,0,5,0"/>
+                    <Button Content="参照..." Click="BrowseFolder_Click" Width="70" Height="28" FontWeight="Bold"
+                            Background="#21262D" Foreground="#FFFFFF" BorderBrush="#8B949E" Cursor="Hand"/>
                 </StackPanel>
             </Grid>
         </Border>
