@@ -7,7 +7,7 @@ namespace ESP32LoggerWin
     public class AppConfig
     {
         public string SaveDirectory { get; set; } = string.Empty;
-        public double PulsePerRevolution { get; set; } = 0.5;
+        public double PulsePerRevolution { get; set; } = 1.0;
         public string LastComPort { get; set; } = string.Empty;
 
         private static readonly string ConfigFileName = "config.json";
@@ -45,7 +45,7 @@ namespace ESP32LoggerWin
             var defaultConfig = new AppConfig
             {
                 SaveDirectory = DefaultPath,
-                PulsePerRevolution = 0.5,
+                PulsePerRevolution = 1.0,
                 LastComPort = string.Empty
             };
             defaultConfig.Save();

@@ -229,7 +229,7 @@
                     <!-- タコメーター下のPPR設定（パルス補正） -->
                     <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
                         <TextBlock Text="PPR補正 (パルス/回転): " FontSize="15" FontWeight="SemiBold" Foreground="#FFFFFF" VerticalAlignment="Center"/>
-                        <ComboBox x:Name="PprComboBox" Width="120" Height="28" SelectedIndex="0" SelectionChanged="PprComboBox_SelectionChanged"
+                        <ComboBox x:Name="PprComboBox" Width="120" Height="28" SelectedIndex="1" SelectionChanged="PprComboBox_SelectionChanged"
                                   Background="#FFFFFF" Foreground="#000000" FontSize="13" FontWeight="Bold" BorderBrush="#FF453A" BorderThickness="1.5">
                             <ComboBox.Resources>
                                 <Style TargetType="ComboBoxItem">
@@ -256,7 +256,9 @@
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
+                    <!-- 境界を明確にするため中央に十分な伸縮バッファを設置 -->
                     <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
                 <!-- 左側：COM接続設定 -->
@@ -278,10 +280,10 @@
                             Background="#DA3633" Foreground="#FFFFFF" BorderBrush="#F85149" FontSize="13" FontWeight="Bold" Cursor="Hand"/>
                 </StackPanel>
 
-                <!-- 右側：データ保存先設定 -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <!-- 右側：データ保存先設定 (Grid.Column="2" に配置) -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                     <TextBlock Text="ログ保存フォルダ:" FontSize="14" FontWeight="Bold" Foreground="#FFFFFF" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <TextBox x:Name="SaveDirTextBox" Width="280" Height="28" IsReadOnly="True" Margin="0,0,8,0" FontSize="13" FontWeight="SemiBold"
+                    <TextBox x:Name="SaveDirTextBox" Width="180" Height="28" IsReadOnly="True" Margin="0,0,8,0" FontSize="13" FontWeight="SemiBold"
                              Background="#0D1117" Foreground="#FFFFFF" BorderBrush="#8B949E" VerticalContentAlignment="Center" Padding="5,0,5,0"/>
                     <Button Content="参照..." Click="BrowseFolder_Click" Width="70" Height="28" FontWeight="Bold"
                             Background="#21262D" Foreground="#FFFFFF" BorderBrush="#8B949E" Cursor="Hand"/>
