@@ -435,6 +435,8 @@ namespace ESP32LoggerWin
 
         private void PprComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            if (_config == null) return; // 初期ロード時のNullReferenceExceptionを防止
+
             if (PprComboBox.SelectedItem is ComboBoxItem item)
             {
                 if (double.TryParse(item.Tag?.ToString(), out double ppr))
