@@ -23,3 +23,13 @@ build_output.log
 
 # Exclude large zip files (such as gradle distribution zip)
 *.zip
+
+# C# / .NET / MSBuild outputs
+WindowsApp/bin/
+WindowsApp/obj/
+*.user
+*.suo
+
+# Exclude large executable to bypass GitHub 100MB file limit
+release/ESP32LoggerWin.exe
+

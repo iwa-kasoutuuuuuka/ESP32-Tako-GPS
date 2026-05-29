@@ -1,0 +1,8 @@
+<Application x:Class="ESP32LoggerWin.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+         <!-- プレミアムなグローバルスタイルなどを後ほど追加可能 -->
+    </Application.Resources>
+</Application>
