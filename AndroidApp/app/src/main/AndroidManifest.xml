@@ -36,12 +36,13 @@
         android:required="true" />
 
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@drawable/ic_launcher"
         android:supportsRtl="true"
         android:theme="@style/Theme.ESP32Logger">
+        <!-- allowBackup="false": adb backupコマンドによる位置情報・ログデータの漏洩を防止 -->
 
         <activity
             android:name=".MainActivity"

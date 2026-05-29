@@ -221,9 +221,15 @@ void core0Task(void* parameter) {
         }
         btBuffer = "";
       } else if (c != '\r') {
+        // 先頭文字が '$' でない場合は不正データとして即座に破棄
+        // （パーシャルライト攻撃・コマンドインジェクション対策）
+        if (btBuffer.length() == 0 && c != '$') {
+          continue; // '$' 以外で始まるデータは蓄積しない
+        }
         btBuffer += c;
         // バッファオーバーフロー防止（128文字を超えたらクリア）
         if (btBuffer.length() > 128) {
+          Serial.println("[BT] バッファ上限超過。不正データとしてクリアします。");
           btBuffer = "";
         }
       }
@@ -314,12 +320,14 @@ void setup() {
   gpsSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
   Serial.println("GPSシリアル通信(HardwareSerial2)を起動しました。");
 
-  // Bluetoothの起動
+  // Bluetoothの起動（PINコードを設定して無認証接続を防止）
+  const char* BT_PIN = "1234";
+  SerialBT.setPin(BT_PIN, strlen(BT_PIN)); // 接続に必要なPINコード（4桁）
   if (!SerialBT.begin("ESP32_Logger")) {
     Serial.println("Bluetoothの初期化に失敗しました。再起動します。");
     ESP.restart();
   }
-  Serial.println("Bluetoothデバイス 「ESP32_Logger」 起動完了");
+  Serial.println("Bluetoothデバイス 「ESP32_Logger」 起動完了 (PIN: 1234)");
 
   // SPI通信およびMicroSDカードの初期化
   SPI.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, SD_CS_PIN);

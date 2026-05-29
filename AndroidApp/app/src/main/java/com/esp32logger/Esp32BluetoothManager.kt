@@ -208,15 +208,7 @@ class Esp32BluetoothManager(
         }
     }
 
-    /**
-     * InputStreamを継続的に読み込むメインループ（後方互換ラッパー）
-     * @deprecated runReadLoopに統合済み。このメソッドは使用されない。
-     */
-    private fun startReadLoop(socket: BluetoothSocket) {
-        readJob = managerScope.launch {
-            runReadLoop(socket)
-        }
-    }
+
 
     /**
      * CSV文字列をパースし、チェックサムを検証する。
