@@ -227,25 +227,10 @@ namespace ESP32LoggerWin
 
         private void DisconnectInternal()
         {
-            // ロギングファイルをクローズ
+            // 1. ロギングファイルをクローズ
             StopLocalLogging();
 
-            if (_serialPort != null)
-            {
-                try
-                {
-                    _serialPort.DataReceived -= SerialPort_DataReceived;
-                    if (_serialPort.IsOpen)
-                    {
-                        _serialPort.Close();
-                    }
-                }
-                catch { }
-                _serialPort.Dispose();
-                _serialPort = null;
-            }
-
-            // UI切り替え
+            // 2. UI切り替えはUIスレッドで即座に行い、ユーザーへ切断完了を明示（フリーズ感を防ぐ）
             Dispatcher.Invoke(() =>
             {
                 ConnectButton.IsEnabled = true;
@@ -264,6 +249,36 @@ namespace ESP32LoggerWin
                 SatellitesText.Text = "捕捉衛星: 0";
                 UtcTimeText.Text = "UTC時刻: --:--:--";
             });
+
+            // 3. シリアルポートのClose/Disposeをバックグラウンドスレッドで非同期に実行
+            // これにより、受信イベント（DataReceived）のDispatcher呼び出しとのデッドロックを100%回避します
+            if (_serialPort != null)
+            {
+                var portToClose = _serialPort;
+                _serialPort = null; // 二重切断防止のために参照を即座にクリア
+
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    try
+                    {
+                        portToClose.DataReceived -= SerialPort_DataReceived;
+                        if (portToClose.IsOpen)
+                        {
+                            // 読み書きバッファを強制クリアしてクローズ時のハングを防止
+                            try { portToClose.DiscardInBuffer(); } catch { }
+                            try { portToClose.DiscardOutBuffer(); } catch { }
+                            
+                            portToClose.Close();
+                        }
+                    }
+                    catch { }
+                    finally
+                    {
+                        try { portToClose.Dispose(); } catch { }
+                        _logWindow?.AppendLog("[SYSTEM] シリアルポートが正常にクローズおよび解放されました。");
+                    }
+                });
+            }
         }
 
         /// <summary>
