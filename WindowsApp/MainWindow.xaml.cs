@@ -332,11 +332,12 @@ namespace ESP32LoggerWin
         /// </summary>
         private void SerialPort_DataReceived(object sender, SerialDataReceivedEventArgs e)
         {
-            if (_serialPort == null || !_serialPort.IsOpen) return;
+            var port = sender as SerialPort;
+            if (port == null || !port.IsOpen) return;
 
             try
             {
-                int bytesAvailable = _serialPort.BytesToRead;
+                int bytesAvailable = port.BytesToRead;
                 if (bytesAvailable <= 0) return;
 
                 // データ受信フラグを立てる（接続後のチェックタイマー用）
@@ -344,7 +345,7 @@ namespace ESP32LoggerWin
 
                 // 利用可能なバイトを一括で読み取る（非ブロッキング）
                 byte[] buffer = new byte[bytesAvailable];
-                int bytesRead = _serialPort.Read(buffer, 0, bytesAvailable);
+                int bytesRead = port.Read(buffer, 0, bytesAvailable);
                 string chunk = Encoding.ASCII.GetString(buffer, 0, bytesRead);
 
                 // デバッグ: 受信した生データをログに表示
